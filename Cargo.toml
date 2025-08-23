@@ -1,0 +1,8 @@
+[package]
+name = "rfc9839"
+version = "0.1.0"
+edition = "2024"
+description = "Implementation of the RFC 9839 specification"
+license = "Apache-2.0"
+
+[dependencies]
