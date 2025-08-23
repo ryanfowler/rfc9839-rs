@@ -3,6 +3,7 @@ name = "rfc9839"
 version = "0.1.0"
 edition = "2024"
 description = "Implementation of the RFC 9839 specification"
+authors = ["Ryan Fowler"]
 license = "Apache-2.0"
-
-[dependencies]
+keywords = ["unicode", "rfc9839", "xml", "validation"]
+categories = ["text-processing"]
