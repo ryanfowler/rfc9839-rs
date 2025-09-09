@@ -350,7 +350,7 @@ pub fn is_unicode_assignable_bytes(bytes: &[u8]) -> bool {
 #[inline(always)]
 fn ascii_ok(b: u8) -> bool {
     // {TAB, LF, CR} or 0x20..=0x7E
-    b == b'\t' || b == b'\n' || b == b'\r' || (b >= 0x20 && b <= 0x7E)
+    b == b'\t' || b == b'\n' || b == b'\r' || (0x20..=0x7E).contains(&b)
 }
 
 #[cfg(test)]
@@ -569,7 +569,7 @@ mod tests {
     #[test]
     fn ascii_ok_rules() {
         // Allowed: TAB/LF/CR and 0x20..=0x7E
-        for &b in &[b'\t', b'\n', b'\r', b' ', b'~'] {
+        for &b in b"\t\n\r ~" {
             assert!(super::ascii_ok(b), "byte 0x{:02X} should be ok", b);
         }
         // Disallowed: other C0 (e.g., 0x1F) and DEL (0x7F)
@@ -623,7 +623,7 @@ mod tests {
     fn supplementary_plane_boundaries_assignable() {
         // At plane starts and ...FFFD ends
         for plane in 0x1u32..=0x10 {
-            let start = (plane << 16) + 0x0000;
+            let start = plane << 16;
             let end_ok = (plane << 16) + 0xFFFD;
             let end_bad1 = (plane << 16) + 0xFFFE;
             let end_bad2 = (plane << 16) + 0xFFFF;
