@@ -22,7 +22,7 @@ RFC 9839 defines three nested subsets of Unicode characters for use in text prot
 - **Character-level APIs**: `is_unicode_scalar_char`, `is_xml_char`, `is_unicode_assignable_char`
 - **String-level APIs**: `is_unicode_scalar`, `is_xml_chars`, `is_unicode_assignable`
 - **Byte-level APIs**: `is_unicode_scalar_bytes`, `is_xml_chars_bytes`, `is_unicode_assignable_bytes`
-- **ASCII fast-path**: tight loops for ASCII data, falling back to `chars()` only after the first non-ASCII byte
+- **ASCII fast-path**: tight loops for XML and Assignable ASCII data, falling back to `chars()` only after the first non-ASCII byte
 - **Zero allocations**, no lookup tables
 
 ## Example
