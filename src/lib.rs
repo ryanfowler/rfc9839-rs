@@ -18,10 +18,12 @@
 //!
 //! - **Character-level** APIs (`is_*_char`) implemented as `const fn` with
 //!   simple range tests.
-//! - **String-level** APIs (`is_*`) with an ASCII fast-path: scan raw bytes
-//!   first, and only fall back to `chars()` after the first non-ASCII byte.
-//! - **Byte-level** APIs (`is_*_bytes`) for validating raw UTF-8 input. The tail
-//!   is decoded once, returning `false` on invalid UTF-8.
+//! - **String-level** APIs (`is_*`) with an ASCII fast-path where validation is
+//!   required: scan raw bytes first, and only fall back to `chars()` after the
+//!   first non-ASCII byte.
+//! - **Byte-level** APIs (`is_*_bytes`) for validating raw UTF-8 input. Scalar
+//!   validation only needs UTF-8 validation; XML/Assignable checks decode the
+//!   tail once and return `false` on invalid UTF-8.
 //! - Zero allocations, no heap lookups, no tables.
 //!
 //! ## Examples
@@ -67,9 +69,8 @@
 /// ```
 #[inline(always)]
 #[must_use]
-pub const fn is_unicode_scalar_char(c: char) -> bool {
-    let u = c as u32;
-    u <= 0xD7FF || (u >= 0xE000 && u <= 0x10FFFF)
+pub const fn is_unicode_scalar_char(_: char) -> bool {
+    true
 }
 
 /// Returns `true` if `c` is an XML Character as defined in RFC 9839.
@@ -148,8 +149,7 @@ pub const fn is_unicode_assignable_char(c: char) -> bool {
 /// Returns `true` if all code points in `s` are Unicode scalar values.
 ///
 /// In safe Rust, any well-formed `&str` contains only scalar values, so this
-/// check will return `true`. It still performs a fast ASCII scan and then
-/// verifies the remainder via `chars()` for defensive validation.
+/// check will return `true`.
 ///
 /// # Examples
 /// ```
@@ -159,18 +159,7 @@ pub const fn is_unicode_assignable_char(c: char) -> bool {
 /// ```
 #[inline]
 #[must_use]
-pub fn is_unicode_scalar(s: &str) -> bool {
-    let bytes = s.as_bytes();
-    let mut i = 0;
-    while i < bytes.len() {
-        let b = bytes[i];
-        if b < 0x80 {
-            i += 1;
-        } else {
-            // non-ASCII: validate the remainder with full char checks
-            return s[i..].chars().all(is_unicode_scalar_char);
-        }
-    }
+pub fn is_unicode_scalar(_: &str) -> bool {
     true
 }
 
@@ -242,8 +231,8 @@ pub fn is_unicode_assignable(s: &str) -> bool {
 
 /// Returns `true` if `bytes` are valid Unicode scalar values.
 ///
-/// If a non-ASCII byte is encountered, the remainder is validated by decoding
-/// as UTF-8; invalid UTF-8 returns `false`.
+/// This returns `true` when `bytes` are valid UTF-8. Rust strings cannot
+/// contain surrogate code points, so UTF-8 validation is sufficient.
 ///
 /// # Examples
 /// ```
@@ -256,21 +245,7 @@ pub fn is_unicode_assignable(s: &str) -> bool {
 #[inline]
 #[must_use]
 pub fn is_unicode_scalar_bytes(bytes: &[u8]) -> bool {
-    let mut i = 0;
-    while i < bytes.len() {
-        let b = bytes[i];
-        if b < 0x80 {
-            i += 1;
-        } else {
-            // non-ASCII: validate the remainder with full char checks
-            return if let Ok(s) = std::str::from_utf8(&bytes[i..]) {
-                s.chars().all(is_unicode_scalar_char)
-            } else {
-                false
-            };
-        }
-    }
-    true
+    std::str::from_utf8(bytes).is_ok()
 }
 
 /// Returns `true` if `bytes` are all valid XML Characters.
