@@ -9,8 +9,7 @@
 //!   included for completeness and defensive validation of `&str` / byte data.
 //! - **XML Characters** — the “Char” production from XML:
 //!   `{TAB, LF, CR} ∪ [0x20–0xD7FF] ∪ [0xE000–0xFFFD] ∪ [0x10000–0x10FFFF]`.
-//!   Excludes C0 controls other than TAB/LF/CR and noncharacters such as
-//!   U+FFFE/U+FFFF.
+//!   Excludes surrogates, C0 controls except TAB/LF/CR, and U+FFFE/U+FFFF.
 //! - **Unicode Assignables** — “not problematic” characters: useful controls,
 //!   printable ASCII (excluding DEL/C1), and all assigned scalars minus the
 //!   standardized noncharacters (…FFFE/FFFF in each plane and U+FDD0–FDEF).
@@ -77,8 +76,8 @@ pub const fn is_unicode_scalar_char(c: char) -> bool {
 ///
 /// `{ TAB, LF, CR } ∪ [0x20–0xD7FF] ∪ [0xE000–0xFFFD] ∪ [0x10000–0x10FFFF]`.
 ///
-/// This is the classic XML “Char” set (C0 controls removed except TAB/LF/CR,
-/// and excluding noncharacters U+FFFE/U+FFFF).
+/// This is the classic XML “Char” set: surrogates, C0 controls except
+/// TAB/LF/CR, and U+FFFE/U+FFFF are excluded.
 ///
 /// # Examples
 /// ```
