@@ -9,7 +9,8 @@
 //!   included for completeness and defensive validation of `&str` / byte data.
 //! - **XML Characters** — the “Char” production from XML:
 //!   `{TAB, LF, CR} ∪ [0x20–0xD7FF] ∪ [0xE000–0xFFFD] ∪ [0x10000–0x10FFFF]`.
-//!   Excludes legacy controls and noncharacters such as U+FFFE/U+FFFF.
+//!   Excludes C0 controls other than TAB/LF/CR and noncharacters such as
+//!   U+FFFE/U+FFFF.
 //! - **Unicode Assignables** — “not problematic” characters: useful controls,
 //!   printable ASCII (excluding DEL/C1), and all assigned scalars minus the
 //!   standardized noncharacters (…FFFE/FFFF in each plane and U+FDD0–FDEF).
@@ -76,7 +77,7 @@ pub const fn is_unicode_scalar_char(c: char) -> bool {
 ///
 /// `{ TAB, LF, CR } ∪ [0x20–0xD7FF] ∪ [0xE000–0xFFFD] ∪ [0x10000–0x10FFFF]`.
 ///
-/// This is the classic XML “Char” set (controls removed except TAB/LF/CR,
+/// This is the classic XML “Char” set (C0 controls removed except TAB/LF/CR,
 /// and excluding noncharacters U+FFFE/U+FFFF).
 ///
 /// # Examples
@@ -177,7 +178,7 @@ pub fn is_unicode_scalar(s: &str) -> bool {
 
 /// Returns `true` if all characters in `s` are XML Characters.
 ///
-/// Validates using an ASCII fast-path (TAB/LF/CR and 0x20..=0x7E), then
+/// Validates using an ASCII fast-path (TAB/LF/CR and 0x20..=0x7F), then
 /// switches to `chars()` on the first non-ASCII byte.
 ///
 /// # Examples
@@ -196,7 +197,7 @@ pub fn is_xml_chars(s: &str) -> bool {
     while i < bytes.len() {
         let b = bytes[i];
         if b < 0x80 {
-            if !ascii_ok(b) {
+            if !ascii_xml_ok(b) {
                 return false;
             }
             i += 1;
@@ -229,7 +230,7 @@ pub fn is_unicode_assignable(s: &str) -> bool {
     while i < bytes.len() {
         let b = bytes[i];
         if b < 0x80 {
-            if !ascii_ok(b) {
+            if !ascii_assignable_ok(b) {
                 return false;
             }
             i += 1;
@@ -294,7 +295,7 @@ pub fn is_xml_chars_bytes(bytes: &[u8]) -> bool {
     while i < bytes.len() {
         let b = bytes[i];
         if b < 0x80 {
-            if !ascii_ok(b) {
+            if !ascii_xml_ok(b) {
                 return false;
             }
             i += 1;
@@ -331,7 +332,7 @@ pub fn is_unicode_assignable_bytes(bytes: &[u8]) -> bool {
     while i < bytes.len() {
         let b = bytes[i];
         if b < 0x80 {
-            if !ascii_ok(b) {
+            if !ascii_assignable_ok(b) {
                 return false;
             }
             i += 1;
@@ -348,7 +349,13 @@ pub fn is_unicode_assignable_bytes(bytes: &[u8]) -> bool {
 }
 
 #[inline(always)]
-fn ascii_ok(b: u8) -> bool {
+fn ascii_xml_ok(b: u8) -> bool {
+    // {TAB, LF, CR} or 0x20..=0x7F
+    b == b'\t' || b == b'\n' || b == b'\r' || (0x20..=0x7F).contains(&b)
+}
+
+#[inline(always)]
+fn ascii_assignable_ok(b: u8) -> bool {
     // {TAB, LF, CR} or 0x20..=0x7E
     b == b'\t' || b == b'\n' || b == b'\r' || (0x20..=0x7E).contains(&b)
 }
@@ -402,8 +409,8 @@ mod tests {
     // ---- is_xml_char --------------------------------------------------------
 
     #[test]
-    fn xml_char_allows_tab_lf_cr_and_printables() {
-        for &c in &['\t', '\n', '\r', ' ', 'A', '~'] {
+    fn xml_char_allows_tab_lf_cr_and_ascii_range() {
+        for &c in &['\t', '\n', '\r', ' ', 'A', '~', '\u{007F}'] {
             assert!(is_xml_char(c), "expected XML char: {:?}", c);
         }
     }
@@ -503,6 +510,7 @@ mod tests {
     #[test]
     fn xml_chars_str_basic_cases() {
         assert!(is_xml_chars("ok\tline\n\rmore"));
+        assert!(is_xml_chars("\u{007F}"));
         assert!(!is_xml_chars("\u{0000}"));
         assert!(!is_xml_chars(&format!("x{}", BMP_FFFE)));
         assert!(is_xml_chars("valid \u{FFFD} char"));
@@ -546,6 +554,7 @@ mod tests {
     #[test]
     fn xml_chars_bytes_respects_ascii_rules_and_utf8_decode() {
         assert!(is_xml_chars_bytes(b"ok\t\n\r ASCII"));
+        assert!(is_xml_chars_bytes(&[0x7F]));
         assert!(!is_xml_chars_bytes(&[0x00])); // NUL forbidden
 
         let with_nonchar = "x\u{FFFF}".as_bytes().to_vec();
@@ -567,14 +576,28 @@ mod tests {
     // ---- Internal ASCII helper ---------------------------------------------
 
     #[test]
-    fn ascii_ok_rules() {
+    fn ascii_xml_ok_rules() {
+        // Allowed: TAB/LF/CR and 0x20..=0x7F
+        for &b in &[b'\t', b'\n', b'\r', b' ', b'~', 0x7F] {
+            assert!(super::ascii_xml_ok(b), "byte 0x{:02X} should be XML-ok", b);
+        }
+        // Disallowed: other C0 controls (e.g., 0x1F).
+        assert!(!super::ascii_xml_ok(0x1F));
+    }
+
+    #[test]
+    fn ascii_assignable_ok_rules() {
         // Allowed: TAB/LF/CR and 0x20..=0x7E
         for &b in b"\t\n\r ~" {
-            assert!(super::ascii_ok(b), "byte 0x{:02X} should be ok", b);
+            assert!(
+                super::ascii_assignable_ok(b),
+                "byte 0x{:02X} should be assignable-ok",
+                b
+            );
         }
-        // Disallowed: other C0 (e.g., 0x1F) and DEL (0x7F)
-        assert!(!super::ascii_ok(0x1F));
-        assert!(!super::ascii_ok(0x7F));
+        // Disallowed: other C0 controls (e.g., 0x1F) and DEL (0x7F).
+        assert!(!super::ascii_assignable_ok(0x1F));
+        assert!(!super::ascii_assignable_ok(0x7F));
     }
 
     // ---- Boundary sweeps (targeted) ----------------------------------------
@@ -584,6 +607,7 @@ mod tests {
         // Lower boundary around 0x20
         assert!(!is_xml_char('\u{001F}'));
         assert!(is_xml_char('\u{0020}'));
+        assert!(is_xml_char('\u{007F}'));
 
         // D7FF/E000 boundary
         assert!(is_xml_char('\u{D7FF}'));
