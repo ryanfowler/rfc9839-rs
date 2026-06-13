@@ -19,25 +19,26 @@ RFC 9839 defines three nested subsets of Unicode characters for use in text prot
 
 ## Features
 
-- **Character-level APIs**: `is_unicode_scalar_char`, `is_xml_char`, `is_unicode_assignable_char`
-- **String-level APIs**: `is_unicode_scalar`, `is_xml_chars`, `is_unicode_assignable`
-- **Byte-level APIs**: `is_unicode_scalar_bytes`, `is_xml_chars_bytes`, `is_unicode_assignable_bytes`
+- **String-level APIs**: `is_unicode_scalar`, `is_xml_chars`, `is_unicode_assignable` at the crate root and in `rfc9839::str`
+- **Byte-level APIs**: `rfc9839::bytes::{is_unicode_scalar, is_xml_chars, is_unicode_assignable}`
+- **Character-level APIs**: `rfc9839::chars::{is_unicode_scalar, is_xml_char, is_unicode_assignable}`
+- **Backwards-compatible aliases**: `is_unicode_scalar_bytes`, `is_xml_chars_bytes`, `is_unicode_assignable_bytes`, `is_unicode_scalar_char`, `is_xml_char`, `is_unicode_assignable_char`
 - **ASCII fast-path**: tight loops for XML and Assignable ASCII data, falling back to `chars()` only after the first non-ASCII byte
 - **Zero allocations**, no lookup tables
 
 ## Example
 
 ```rust
-use rfc9839::*;
+use rfc9839::{bytes, chars};
 
 // Scalars (always true for safe Rust strings)
-assert!(is_unicode_scalar("hello 🌍"));
+assert!(rfc9839::is_unicode_scalar("hello 🌍"));
 
 // XML Characters
-assert!(is_xml_chars("ok\tline\n"));
-assert!(!is_xml_chars("\u{0000}")); // NUL is disallowed
+assert!(rfc9839::is_xml_chars("ok\tline\n"));
+assert!(!rfc9839::is_xml_chars("\u{0000}")); // NUL is disallowed
 
-// Unicode Assignables
-assert!(is_unicode_assignable("emoji 👍"));
-assert!(!is_unicode_assignable("\u{007F}")); // DEL is excluded
+// Byte and character APIs live in modules.
+assert!(bytes::is_unicode_assignable("emoji 👍".as_bytes()));
+assert!(!chars::is_unicode_assignable('\u{007F}')); // DEL is excluded
 ```

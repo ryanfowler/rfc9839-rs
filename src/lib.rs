@@ -16,31 +16,34 @@
 //!
 //! ## Features
 //!
-//! - **Character-level** APIs (`is_*_char`) implemented as `const fn` with
-//!   simple range tests.
-//! - **String-level** APIs (`is_*`) with an ASCII fast-path where validation is
-//!   required: scan raw bytes first, and only fall back to `chars()` after the
+//! - **String-level** APIs (`is_*`) are available at the crate root and in
+//!   [`mod@str`]. XML/Assignable validation uses an ASCII fast-path where validation
+//!   is required: scan raw bytes first, and only fall back to `chars()` after the
 //!   first non-ASCII byte.
-//! - **Byte-level** APIs (`is_*_bytes`) for validating raw UTF-8 input. Scalar
-//!   validation only needs UTF-8 validation; XML/Assignable checks decode the
-//!   tail once and return `false` on invalid UTF-8.
+//! - **Byte-level** APIs are available in [`bytes`] for validating raw UTF-8
+//!   input. Scalar validation only needs UTF-8 validation; XML/Assignable checks
+//!   decode the tail once and return `false` on invalid UTF-8.
+//! - **Character-level** APIs are available in [`chars`] and implemented as
+//!   `const fn` with simple range tests.
+//! - Backwards-compatible aliases such as `is_xml_chars_bytes` and
+//!   `is_xml_char` remain available at the crate root.
 //! - Zero allocations, no heap lookups, no tables.
 //!
 //! ## Examples
 //!
 //! ```
-//! use rfc9839::*;
+//! use rfc9839::{bytes, chars};
 //!
 //! // Scalars (always true for safe Rust strings)
-//! assert!(is_unicode_scalar("hello 🌍"));
+//! assert!(rfc9839::is_unicode_scalar("hello 🌍"));
 //!
 //! // XML Characters
-//! assert!(is_xml_chars("ok\tline\n"));
-//! assert!(!is_xml_chars("\u{0000}")); // NUL is disallowed
+//! assert!(rfc9839::is_xml_chars("ok\tline\n"));
+//! assert!(!rfc9839::is_xml_chars("\u{0000}")); // NUL is disallowed
 //!
-//! // Unicode Assignables
-//! assert!(is_unicode_assignable("emoji 👍"));
-//! assert!(!is_unicode_assignable("\u{007F}")); // DEL is excluded
+//! // Byte and character APIs live in modules.
+//! assert!(bytes::is_unicode_assignable("emoji 👍".as_bytes()));
+//! assert!(!chars::is_unicode_assignable('\u{007F}')); // DEL is excluded
 //! ```
 //!
 //! ## Performance
@@ -52,274 +55,289 @@
 //!
 //! [RFC 9839]: https://www.rfc-editor.org/rfc/rfc9839
 
-/// Returns `true` if `c` is a Unicode scalar value per RFC 9839.
-///
-/// Any code point except the UTF-16 surrogate range `U+D800..=U+DFFF`.
-///
-/// In Rust, every `char` is already a scalar value by construction, so this
-/// function will return `true` for all valid `char`s. It’s provided for
-/// completeness and symmetry with the string/byte variants.
-///
-/// # Examples
-/// ```
-/// use rfc9839::*;
-///
-/// assert!(is_unicode_scalar_char('a'));
-/// assert!(is_unicode_scalar_char('👍'));
-/// ```
-#[inline(always)]
-#[must_use]
-pub const fn is_unicode_scalar_char(_: char) -> bool {
-    true
-}
-
-/// Returns `true` if `c` is an XML Character as defined in RFC 9839.
-///
-/// `{ TAB, LF, CR } ∪ [0x20–0xD7FF] ∪ [0xE000–0xFFFD] ∪ [0x10000–0x10FFFF]`.
-///
-/// This is the classic XML “Char” set: surrogates, C0 controls except
-/// TAB/LF/CR, and U+FFFE/U+FFFF are excluded.
-///
-/// # Examples
-/// ```
-/// use rfc9839::*;
-///
-/// assert!(is_xml_char('\t'));
-/// assert!(is_xml_char('A'));
-/// assert!(!is_xml_char('\u{0001}')); // disallowed control
-/// assert!(!is_xml_char('\u{FFFF}')); // noncharacter
-/// ```
-#[inline(always)]
-#[must_use]
-pub const fn is_xml_char(c: char) -> bool {
-    let u = c as u32;
-    (u == 0x09)
-        || (u == 0x0A)
-        || (u == 0x0D)
-        || (u >= 0x20 && u <= 0xD7FF)
-        || (u >= 0xE000 && u <= 0xFFFD)
-        || (u >= 0x10000 && u <= 0x10FFFF)
-}
-
-/// Returns `true` if `c` is a Unicode Assignable character per RFC 9839.
-///
-/// All scalar values that are not legacy controls, surrogates, or standardized
-/// noncharacters, including currently unassigned code points.
-///
-/// # Examples
-/// ```
-/// use rfc9839::*;
-///
-/// assert!(is_unicode_assignable_char('A'));
-/// assert!(is_unicode_assignable_char('👍'));
-/// assert!(!is_unicode_assignable_char('\u{007F}'));   // DEL
-/// assert!(!is_unicode_assignable_char('\u{0085}'));   // C1 control
-/// assert!(!is_unicode_assignable_char('\u{FDD0}'));   // noncharacter
-/// assert!(!is_unicode_assignable_char('\u{1FFFE}'));  // plane noncharacter
-/// ```
-#[inline(always)]
-#[must_use]
-pub const fn is_unicode_assignable_char(c: char) -> bool {
-    let u = c as u32;
-    (u == 0x09)
-        || (u == 0x0A)
-        || (u == 0x0D)
-        || (u >= 0x20 && u <= 0x7E)
-        || (u >= 0xA0 && u <= 0xD7FF)
-        || (u >= 0xE000 && u <= 0xFDCF)
-        || (u >= 0xFDF0 && u <= 0xFFFD)
-        || (u >= 0x10000 && u <= 0x1FFFD)
-        || (u >= 0x20000 && u <= 0x2FFFD)
-        || (u >= 0x30000 && u <= 0x3FFFD)
-        || (u >= 0x40000 && u <= 0x4FFFD)
-        || (u >= 0x50000 && u <= 0x5FFFD)
-        || (u >= 0x60000 && u <= 0x6FFFD)
-        || (u >= 0x70000 && u <= 0x7FFFD)
-        || (u >= 0x80000 && u <= 0x8FFFD)
-        || (u >= 0x90000 && u <= 0x9FFFD)
-        || (u >= 0xA0000 && u <= 0xAFFFD)
-        || (u >= 0xB0000 && u <= 0xBFFFD)
-        || (u >= 0xC0000 && u <= 0xCFFFD)
-        || (u >= 0xD0000 && u <= 0xDFFFD)
-        || (u >= 0xE0000 && u <= 0xEFFFD)
-        || (u >= 0xF0000 && u <= 0xFFFFD)
-        || (u >= 0x100000 && u <= 0x10FFFD)
-}
-
-/// Returns `true` if all code points in `s` are Unicode scalar values.
-///
-/// In safe Rust, any well-formed `&str` contains only scalar values, so this
-/// check will return `true`.
-///
-/// # Examples
-/// ```
-/// use rfc9839::*;
-///
-/// assert!(is_unicode_scalar("hello 🌍"));
-/// ```
-#[inline]
-#[must_use]
-pub fn is_unicode_scalar(_: &str) -> bool {
-    true
-}
-
-/// Returns `true` if all characters in `s` are XML Characters.
-///
-/// Validates using an ASCII fast-path (TAB/LF/CR and 0x20..=0x7F), then
-/// switches to `chars()` on the first non-ASCII byte.
-///
-/// # Examples
-/// ```
-/// use rfc9839::*;
-///
-/// assert!(is_xml_chars("ok\tline\n"));
-/// assert!(!is_xml_chars("\u{0000}")); // NUL disallowed
-/// assert!(!is_xml_chars("\u{FFFF}")); // noncharacter
-/// ```
-#[inline]
-#[must_use]
-pub fn is_xml_chars(s: &str) -> bool {
-    let bytes = s.as_bytes();
-    let mut i = 0;
-    while i < bytes.len() {
-        let b = bytes[i];
-        if b < 0x80 {
-            if !ascii_xml_ok(b) {
-                return false;
-            }
-            i += 1;
-        } else {
-            // non-ASCII: validate the remainder with full char checks
-            return s[i..].chars().all(is_xml_char);
-        }
+/// Character-level validators.
+pub mod chars {
+    /// Returns `true` if `c` is a Unicode scalar value per RFC 9839.
+    ///
+    /// Any code point except the UTF-16 surrogate range `U+D800..=U+DFFF`.
+    ///
+    /// In Rust, every `char` is already a scalar value by construction, so this
+    /// function will return `true` for all valid `char`s. It’s provided for
+    /// completeness and symmetry with the string/byte variants.
+    ///
+    /// # Examples
+    /// ```
+    /// assert!(rfc9839::chars::is_unicode_scalar('a'));
+    /// assert!(rfc9839::chars::is_unicode_scalar('👍'));
+    /// ```
+    #[inline(always)]
+    #[must_use]
+    pub const fn is_unicode_scalar(_: char) -> bool {
+        true
     }
-    true
-}
 
-/// Returns `true` if all characters in `s` are Unicode Assignables.
-///
-/// Allows all scalar values that are not legacy controls, surrogates, or
-/// standardized noncharacters, including currently unassigned code points.
-///
-/// # Examples
-/// ```
-/// use rfc9839::*;
-///
-/// assert!(is_unicode_assignable("Hello 👍"));
-/// assert!(!is_unicode_assignable("\u{007F}"));  // DEL
-/// assert!(!is_unicode_assignable("\u{1FFFE}")); // plane noncharacter
-/// ```
-#[inline]
-#[must_use]
-pub fn is_unicode_assignable(s: &str) -> bool {
-    let bytes = s.as_bytes();
-    let mut i = 0;
-    while i < bytes.len() {
-        let b = bytes[i];
-        if b < 0x80 {
-            if !ascii_assignable_ok(b) {
-                return false;
-            }
-            i += 1;
-        } else {
-            // non-ASCII: validate the remainder with full char checks
-            return s[i..].chars().all(is_unicode_assignable_char);
-        }
+    /// Returns `true` if `c` is an XML Character as defined in RFC 9839.
+    ///
+    /// `{ TAB, LF, CR } ∪ [0x20–0xD7FF] ∪ [0xE000–0xFFFD] ∪ [0x10000–0x10FFFF]`.
+    ///
+    /// This is the classic XML “Char” set: surrogates, C0 controls except
+    /// TAB/LF/CR, and U+FFFE/U+FFFF are excluded.
+    ///
+    /// # Examples
+    /// ```
+    /// assert!(rfc9839::chars::is_xml_char('\t'));
+    /// assert!(rfc9839::chars::is_xml_char('A'));
+    /// assert!(!rfc9839::chars::is_xml_char('\u{0001}')); // disallowed control
+    /// assert!(!rfc9839::chars::is_xml_char('\u{FFFF}')); // noncharacter
+    /// ```
+    #[inline(always)]
+    #[must_use]
+    pub const fn is_xml_char(c: char) -> bool {
+        let u = c as u32;
+        (u == 0x09)
+            || (u == 0x0A)
+            || (u == 0x0D)
+            || (u >= 0x20 && u <= 0xD7FF)
+            || (u >= 0xE000 && u <= 0xFFFD)
+            || (u >= 0x10000 && u <= 0x10FFFF)
     }
-    true
+
+    /// Returns `true` if `c` is a Unicode Assignable character per RFC 9839.
+    ///
+    /// All scalar values that are not legacy controls, surrogates, or standardized
+    /// noncharacters, including currently unassigned code points.
+    ///
+    /// # Examples
+    /// ```
+    /// assert!(rfc9839::chars::is_unicode_assignable('A'));
+    /// assert!(rfc9839::chars::is_unicode_assignable('👍'));
+    /// assert!(!rfc9839::chars::is_unicode_assignable('\u{007F}'));   // DEL
+    /// assert!(!rfc9839::chars::is_unicode_assignable('\u{0085}'));   // C1 control
+    /// assert!(!rfc9839::chars::is_unicode_assignable('\u{FDD0}'));   // noncharacter
+    /// assert!(!rfc9839::chars::is_unicode_assignable('\u{1FFFE}'));  // plane noncharacter
+    /// ```
+    #[inline(always)]
+    #[must_use]
+    pub const fn is_unicode_assignable(c: char) -> bool {
+        let u = c as u32;
+        (u == 0x09)
+            || (u == 0x0A)
+            || (u == 0x0D)
+            || (u >= 0x20 && u <= 0x7E)
+            || (u >= 0xA0 && u <= 0xD7FF)
+            || (u >= 0xE000 && u <= 0xFDCF)
+            || (u >= 0xFDF0 && u <= 0xFFFD)
+            || (u >= 0x10000 && u <= 0x1FFFD)
+            || (u >= 0x20000 && u <= 0x2FFFD)
+            || (u >= 0x30000 && u <= 0x3FFFD)
+            || (u >= 0x40000 && u <= 0x4FFFD)
+            || (u >= 0x50000 && u <= 0x5FFFD)
+            || (u >= 0x60000 && u <= 0x6FFFD)
+            || (u >= 0x70000 && u <= 0x7FFFD)
+            || (u >= 0x80000 && u <= 0x8FFFD)
+            || (u >= 0x90000 && u <= 0x9FFFD)
+            || (u >= 0xA0000 && u <= 0xAFFFD)
+            || (u >= 0xB0000 && u <= 0xBFFFD)
+            || (u >= 0xC0000 && u <= 0xCFFFD)
+            || (u >= 0xD0000 && u <= 0xDFFFD)
+            || (u >= 0xE0000 && u <= 0xEFFFD)
+            || (u >= 0xF0000 && u <= 0xFFFFD)
+            || (u >= 0x100000 && u <= 0x10FFFD)
+    }
 }
 
-/// Returns `true` if `bytes` are valid Unicode scalar values.
-///
-/// This returns `true` when `bytes` are valid UTF-8. Rust strings cannot
-/// contain surrogate code points, so UTF-8 validation is sufficient.
-///
-/// # Examples
-/// ```
-/// use rfc9839::*;
-///
-/// assert!(is_unicode_scalar_bytes(b"ASCII only"));
-/// assert!(is_unicode_scalar_bytes("héllo".as_bytes()));
-/// assert!(!is_unicode_scalar_bytes(&[0xF0, 0x28, 0x8C, 0x28])); // invalid UTF-8
-/// ```
-#[inline]
-#[must_use]
-pub fn is_unicode_scalar_bytes(bytes: &[u8]) -> bool {
-    std::str::from_utf8(bytes).is_ok()
-}
+/// String-level validators for `&str`.
+pub mod str {
+    use super::{ascii_assignable_ok, ascii_xml_ok, chars};
 
-/// Returns `true` if `bytes` are all valid XML Characters.
-///
-/// On the first non-ASCII byte, the tail is decoded as UTF-8; invalid UTF-8
-/// returns `false`.
-///
-/// # Examples
-/// ```
-/// use rfc9839::*;
-///
-/// assert!(is_xml_chars_bytes(b"ok\t\n\r ASCII"));
-/// assert!(!is_xml_chars_bytes(&[0x00])); // NUL not allowed
-/// assert!(!is_xml_chars_bytes("a\u{FFFF}".as_bytes())); // noncharacter
-/// ```
-#[inline]
-#[must_use]
-pub fn is_xml_chars_bytes(bytes: &[u8]) -> bool {
-    let mut i = 0;
-    while i < bytes.len() {
-        let b = bytes[i];
-        if b < 0x80 {
-            if !ascii_xml_ok(b) {
-                return false;
-            }
-            i += 1;
-        } else {
-            // non-ASCII: validate the remainder with full char checks
-            return if let Ok(s) = std::str::from_utf8(&bytes[i..]) {
-                s.chars().all(is_xml_char)
+    /// Returns `true` if all code points in `s` are Unicode scalar values.
+    ///
+    /// In safe Rust, any well-formed `&str` contains only scalar values, so this
+    /// check will return `true`.
+    ///
+    /// # Examples
+    /// ```
+    /// assert!(rfc9839::str::is_unicode_scalar("hello 🌍"));
+    /// assert!(rfc9839::is_unicode_scalar("hello 🌍"));
+    /// ```
+    #[inline]
+    #[must_use]
+    pub fn is_unicode_scalar(_: &str) -> bool {
+        true
+    }
+
+    /// Returns `true` if all characters in `s` are XML Characters.
+    ///
+    /// Validates using an ASCII fast-path (TAB/LF/CR and 0x20..=0x7F), then
+    /// switches to `chars()` on the first non-ASCII byte.
+    ///
+    /// # Examples
+    /// ```
+    /// assert!(rfc9839::str::is_xml_chars("ok\tline\n"));
+    /// assert!(rfc9839::is_xml_chars("ok\tline\n"));
+    /// assert!(!rfc9839::str::is_xml_chars("\u{0000}")); // NUL disallowed
+    /// assert!(!rfc9839::str::is_xml_chars("\u{FFFF}")); // noncharacter
+    /// ```
+    #[inline]
+    #[must_use]
+    pub fn is_xml_chars(s: &str) -> bool {
+        let bytes = s.as_bytes();
+        let mut i = 0;
+        while i < bytes.len() {
+            let b = bytes[i];
+            if b < 0x80 {
+                if !ascii_xml_ok(b) {
+                    return false;
+                }
+                i += 1;
             } else {
-                false
-            };
+                // non-ASCII: validate the remainder with full char checks
+                return s[i..].chars().all(chars::is_xml_char);
+            }
         }
+        true
     }
-    true
+
+    /// Returns `true` if all characters in `s` are Unicode Assignables.
+    ///
+    /// Allows all scalar values that are not legacy controls, surrogates, or
+    /// standardized noncharacters, including currently unassigned code points.
+    ///
+    /// # Examples
+    /// ```
+    /// assert!(rfc9839::str::is_unicode_assignable("Hello 👍"));
+    /// assert!(rfc9839::is_unicode_assignable("Hello 👍"));
+    /// assert!(!rfc9839::str::is_unicode_assignable("\u{007F}"));  // DEL
+    /// assert!(!rfc9839::str::is_unicode_assignable("\u{1FFFE}")); // plane noncharacter
+    /// ```
+    #[inline]
+    #[must_use]
+    pub fn is_unicode_assignable(s: &str) -> bool {
+        let bytes = s.as_bytes();
+        let mut i = 0;
+        while i < bytes.len() {
+            let b = bytes[i];
+            if b < 0x80 {
+                if !ascii_assignable_ok(b) {
+                    return false;
+                }
+                i += 1;
+            } else {
+                // non-ASCII: validate the remainder with full char checks
+                return s[i..].chars().all(chars::is_unicode_assignable);
+            }
+        }
+        true
+    }
 }
 
-/// Returns `true` if `bytes` are all valid Unicode Assignables.
-///
-/// On the first non-ASCII byte, the tail is decoded as UTF-8; invalid UTF-8
-/// returns `false`.
-///
-/// # Examples
-/// ```
-/// use rfc9839::*;
-///
-/// assert!(is_unicode_assignable_bytes(b"Hello World"));
-/// assert!(is_unicode_assignable_bytes("👍".as_bytes()));
-/// assert!(!is_unicode_assignable_bytes(&[0x7F])); // DEL not allowed
-/// assert!(!is_unicode_assignable_bytes("x\u{1FFFE}".as_bytes())); // plane noncharacter
-/// ```
-#[inline]
-#[must_use]
-pub fn is_unicode_assignable_bytes(bytes: &[u8]) -> bool {
-    let mut i = 0;
-    while i < bytes.len() {
-        let b = bytes[i];
-        if b < 0x80 {
-            if !ascii_assignable_ok(b) {
-                return false;
-            }
-            i += 1;
-        } else {
-            // non-ASCII: validate the remainder with full char checks
-            return if let Ok(s) = std::str::from_utf8(&bytes[i..]) {
-                s.chars().all(is_unicode_assignable_char)
-            } else {
-                false
-            };
-        }
+/// Byte-level validators for UTF-8 encoded data.
+pub mod bytes {
+    use super::{ascii_assignable_ok, ascii_xml_ok, chars};
+
+    /// Returns `true` if `bytes` are valid Unicode scalar values.
+    ///
+    /// This returns `true` when `bytes` are valid UTF-8. Rust strings cannot
+    /// contain surrogate code points, so UTF-8 validation is sufficient.
+    ///
+    /// # Examples
+    /// ```
+    /// assert!(rfc9839::bytes::is_unicode_scalar(b"ASCII only"));
+    /// assert!(rfc9839::bytes::is_unicode_scalar("héllo".as_bytes()));
+    /// assert!(!rfc9839::bytes::is_unicode_scalar(&[0xF0, 0x28, 0x8C, 0x28]));
+    /// ```
+    #[inline]
+    #[must_use]
+    pub fn is_unicode_scalar(bytes: &[u8]) -> bool {
+        std::str::from_utf8(bytes).is_ok()
     }
-    true
+
+    /// Returns `true` if `bytes` are all valid XML Characters.
+    ///
+    /// On the first non-ASCII byte, the tail is decoded as UTF-8; invalid UTF-8
+    /// returns `false`.
+    ///
+    /// # Examples
+    /// ```
+    /// assert!(rfc9839::bytes::is_xml_chars(b"ok\t\n\r ASCII"));
+    /// assert!(!rfc9839::bytes::is_xml_chars(&[0x00])); // NUL not allowed
+    /// assert!(!rfc9839::bytes::is_xml_chars("a\u{FFFF}".as_bytes())); // noncharacter
+    /// ```
+    #[inline]
+    #[must_use]
+    pub fn is_xml_chars(bytes: &[u8]) -> bool {
+        let mut i = 0;
+        while i < bytes.len() {
+            let b = bytes[i];
+            if b < 0x80 {
+                if !ascii_xml_ok(b) {
+                    return false;
+                }
+                i += 1;
+            } else {
+                // non-ASCII: validate the remainder with full char checks
+                return if let Ok(s) = std::str::from_utf8(&bytes[i..]) {
+                    s.chars().all(chars::is_xml_char)
+                } else {
+                    false
+                };
+            }
+        }
+        true
+    }
+
+    /// Returns `true` if `bytes` are all valid Unicode Assignables.
+    ///
+    /// On the first non-ASCII byte, the tail is decoded as UTF-8; invalid UTF-8
+    /// returns `false`.
+    ///
+    /// # Examples
+    /// ```
+    /// assert!(rfc9839::bytes::is_unicode_assignable(b"Hello World"));
+    /// assert!(rfc9839::bytes::is_unicode_assignable("👍".as_bytes()));
+    /// assert!(!rfc9839::bytes::is_unicode_assignable(&[0x7F])); // DEL not allowed
+    /// assert!(!rfc9839::bytes::is_unicode_assignable("x\u{1FFFE}".as_bytes()));
+    /// ```
+    #[inline]
+    #[must_use]
+    pub fn is_unicode_assignable(bytes: &[u8]) -> bool {
+        let mut i = 0;
+        while i < bytes.len() {
+            let b = bytes[i];
+            if b < 0x80 {
+                if !ascii_assignable_ok(b) {
+                    return false;
+                }
+                i += 1;
+            } else {
+                // non-ASCII: validate the remainder with full char checks
+                return if let Ok(s) = std::str::from_utf8(&bytes[i..]) {
+                    s.chars().all(chars::is_unicode_assignable)
+                } else {
+                    false
+                };
+            }
+        }
+        true
+    }
 }
+
+#[doc(inline)]
+pub use str::*;
+
+#[doc(inline)]
+pub use bytes::is_unicode_assignable as is_unicode_assignable_bytes;
+#[doc(inline)]
+pub use bytes::is_unicode_scalar as is_unicode_scalar_bytes;
+#[doc(inline)]
+pub use bytes::is_xml_chars as is_xml_chars_bytes;
+
+#[doc(inline)]
+pub use chars::is_unicode_assignable as is_unicode_assignable_char;
+#[doc(inline)]
+pub use chars::is_unicode_scalar as is_unicode_scalar_char;
+#[doc(inline)]
+pub use chars::is_xml_char;
 
 #[inline(always)]
 fn ascii_xml_ok(b: u8) -> bool {
