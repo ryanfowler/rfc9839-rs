@@ -10,9 +10,9 @@
 //! - **XML Characters** — the “Char” production from XML:
 //!   `{TAB, LF, CR} ∪ [0x20–0xD7FF] ∪ [0xE000–0xFFFD] ∪ [0x10000–0x10FFFF]`.
 //!   Excludes surrogates, C0 controls except TAB/LF/CR, and U+FFFE/U+FFFF.
-//! - **Unicode Assignables** — “not problematic” characters: useful controls,
-//!   printable ASCII (excluding DEL/C1), and all assigned scalars minus the
-//!   standardized noncharacters (…FFFE/FFFF in each plane and U+FDD0–FDEF).
+//! - **Unicode Assignables** — all scalar values that are not legacy controls,
+//!   surrogates, or standardized noncharacters, including currently unassigned
+//!   code points.
 //!
 //! ## Features
 //!
@@ -102,9 +102,8 @@ pub const fn is_xml_char(c: char) -> bool {
 
 /// Returns `true` if `c` is a Unicode Assignable character per RFC 9839.
 ///
-/// “not problematic” characters - allowing TAB/LF/CR, printable ASCII (excluding
-/// DEL/C1), and all assigned scalars minus the standardized noncharacters
-/// (…FFFE/FFFF in each plane and U+FDD0..=U+FDEF).
+/// All scalar values that are not legacy controls, surrogates, or standardized
+/// noncharacters, including currently unassigned code points.
 ///
 /// # Examples
 /// ```
@@ -210,8 +209,8 @@ pub fn is_xml_chars(s: &str) -> bool {
 
 /// Returns `true` if all characters in `s` are Unicode Assignables.
 ///
-/// Allows TAB/LF/CR, printable ASCII (excluding DEL), and assigned scalars
-/// minus standardized noncharacters across all planes.
+/// Allows all scalar values that are not legacy controls, surrogates, or
+/// standardized noncharacters, including currently unassigned code points.
 ///
 /// # Examples
 /// ```
