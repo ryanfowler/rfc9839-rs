@@ -11,7 +11,7 @@ RFC 9839 defines three nested subsets of Unicode characters for use in text prot
 - **Unicode Scalars** – all code points except UTF-16 surrogates.
   *Every Rust `char` is already a scalar value; checks are included for completeness and for raw byte validation.*
 - **XML Characters** – `{ TAB, LF, CR } ∪ [0x20–0xD7FF] ∪ [0xE000–0xFFFD] ∪ [0x10000–0x10FFFF]`.
-  *This is the XML “Char” production with legacy controls and noncharacters excluded.*
+  *This is the XML “Char” production with C0 controls other than TAB/LF/CR and noncharacters excluded.*
 - **Unicode Assignables** – “not problematic” characters: useful controls, printable ASCII (excluding DEL/C1),
   and all assigned scalars minus standardized noncharacters (…FFFE/FFFF in each plane and U+FDD0–FDEF).
 
